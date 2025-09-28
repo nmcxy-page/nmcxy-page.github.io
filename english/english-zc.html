@@ -25,6 +25,10 @@
         /* 隐藏滚动条但保留可滚动（主要针对 iOS/WebKit） */
         .no-scrollbar { scrollbar-width: none; }
         .no-scrollbar::-webkit-scrollbar { width: 0; height: 0; }
+
+        /* 选项使用 Alert 展示为可点击卡片 */
+        #choices .alert { cursor: pointer; user-select: none; margin-bottom: 0; }
+        #choices .alert:focus, #choices .alert:active { outline: none; box-shadow: none; }
     </style>
 </head>
 
@@ -69,7 +73,7 @@
             }
 
             const state = {
-                selectItem: '/english/2000.json',
+                selectItem: '/english/dlg.json',
                 itemList: [
                     { id: 1, title: '多邻国单词', url: '/english/dlg.json' },
                     { id: 2, title: '2000单词', url: '/english/2000.json' },
@@ -157,26 +161,26 @@
 
                 els.choices.innerHTML = '';
                 options.forEach(text => {
-                    const btn = document.createElement('button');
-                    btn.textContent = text;
-                    btn.className = 'btn btn-outline-secondary w-100';
-                    btn.setAttribute('type', 'button'); // 明确为普通按钮，避免默认行为
-                    // 在 iOS 上避免新建按钮自动获得焦点导致显示为"选中"样式
+                    const item = document.createElement('div');
+                    item.textContent = text;
+                    item.className = 'alert alert-secondary';
+                    // iOS: 避免焦点
                     if (/iPad|iPhone|iPod/.test(navigator.userAgent)) {
-                        btn.tabIndex = -1;
+                        item.tabIndex = -1;
                     }
-                    btn.addEventListener('click', () => handleChoice(text, btn));
-                    els.choices.appendChild(btn);
+                    item.addEventListener('click', () => handleChoice(text, item));
+                    els.choices.appendChild(item);
                 });
             }
 
-            function handleChoice(val, btn) {
+            function handleChoice(val, el) {
                 const correct = val === state.correctValue;
-                btn.classList.remove('btn-outline-secondary');
-                btn.classList.add(correct ? 'btn-outline-success' : 'btn-outline-danger');
-                btn.disabled = true;
+                // 切换为成功/失败样式，并禁用再次点击
+                el.classList.remove('alert-secondary');
+                el.classList.add(correct ? 'alert-success' : 'alert-danger');
+                el.style.pointerEvents = 'none';
                 // 立即失焦，避免 iOS 在下一题上保留选中样式
-                try { btn.blur(); } catch (_) {}
+                try { el.blur(); } catch (_) {}
                 if (correct) {
                     showOverlay('✅ 正确！');
                     state.c += 1;
