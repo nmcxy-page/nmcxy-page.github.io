@@ -6,7 +6,7 @@
     <meta name="viewport" id="viewport"
         content="width=device-width,initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>机械英语</title>
-    <link rel="stylesheet" href="resource/libs/bootstrap.css">
+    <link rel="stylesheet" href="/resource/libs/bootstrap.css">
 </head>
 
 <body>
@@ -15,7 +15,7 @@
             <div class="container py-2 d-flex align-items-center justify-content-between">
                 <strong>机械英语</strong>
                 <form class="d-flex align-items-center gap-2">
-                    <a class="btn btn-link text-decoration-none" href="/english.html">打字模式></a>
+                    <a class="btn btn-link text-decoration-none" href="/english/english.html">打字模式></a>
                     <select id="datasetSelect" class="form-select form-select-sm w-auto"></select>
                 </form>
             </div>
@@ -38,12 +38,12 @@
     <script>
         (function () {
             const state = {
-                selectItem: '/resource/english/2000.json',
+                selectItem: '/english/2000.json',
                 itemList: [
-                    { id: 1, title: '多邻国单词', url: '/resource/english/dlg.json' },
-                    { id: 2, title: '2000单词', url: '/resource/english/2000.json' },
-                    { id: 3, title: '4000单词', url: '/resource/english/4000.json' },
-                    { id: 4, title: '6000单词', url: '/resource/english/6000.json' }
+                    { id: 1, title: '多邻国单词', url: '/english/dlg.json' },
+                    { id: 2, title: '2000单词', url: '/english/2000.json' },
+                    { id: 3, title: '4000单词', url: '/english/4000.json' },
+                    { id: 4, title: '6000单词', url: '/english/6000.json' }
                     
                 ],
                 c: 0,
