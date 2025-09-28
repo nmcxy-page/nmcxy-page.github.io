@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>JSON 处理工具</title>
+	<link rel="stylesheet" href="/resource/libs/bootstrap.css">
+	<style>
+		html, body { height: 100%; }
+		body { background-color: #f8f9fa; overflow: hidden; }
+		textarea { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+		/* 面板改为自适应 flex，高度由父容器分配，只有内部 textarea 滚动 */
+		.pane { display: flex; flex-direction: column; min-height: 0; }
+		.pane .card-body { flex: 1 1 auto; min-height: 0; }
+		.pane textarea { flex: 1 1 auto; min-height: 0; resize: none; overflow: auto; }
+		.toolbar .btn { white-space: nowrap; }
+		.small-muted { font-size: 12px; color: #6c757d; }
+	</style>
+	<link rel="icon" href="data:,">
+	<meta name="robots" content="noindex">
+	<meta name="description" content="基于浏览器的 JSON 格式化、压缩、排序、校验 工具">
+	<meta name="keywords" content="JSON, 格式化, 压缩, 排序, 校验, 工具">
+    
+</head>
+<body class="h-100">
+	<div class="container-fluid h-100 d-flex flex-column p-2">
+		<header class="flex-shrink-0 d-flex align-items-center justify-content-between mb-2">
+			<h4 class="h4 m-0">在线JSON处理工具</h4>
+			<div class="d-flex align-items-center gap-2">
+                <button id="btn-copy" class="btn btn-sm btn-outline-secondary">复制</button>
+				<button id="btn-download" class="btn btn-sm btn-outline-secondary">下载输出</button>
+				<a class="btn btn-sm btn-outline-secondary" href="https://nsqq.com">首页</a>
+			</div>
+		</header>
+
+		<!-- 上中下三段：使用 flex 填满屏幕，仅输入/输出滚动 -->
+		<main class="flex-grow-1 d-flex flex-column min-vh-0 min-h-0">
+			<!-- 上：输入 -->
+			<div class="flex-grow-1 d-flex flex-column min-h-0 mb-2">
+				<div class="card h-100 pane">
+				<div class="card-header d-flex align-items-center justify-content-between">
+					<span>输入 JSON</span>
+					<small id="input-stats" class="text-muted"></small>
+				</div>
+					<div class="card-body p-0 d-flex flex-column">
+						<textarea id="input" class="form-control border-0 rounded-0" placeholder='在此粘贴 JSON...'></textarea>
+				</div>
+			</div>
+		</div>
+			<!-- 中：工具条 -->
+			<div class="toolbar d-flex flex-wrap justify-content-center gap-2 align-items-center my-1 flex-shrink-0">
+				<div class="btn-group btn-group-sm" role="group" aria-label="主操作">
+					<button id="btn-format" class="btn  btn-primary">格式化</button>
+					<button id="btn-minify" class="btn btn-outline-primary">压缩</button>
+                    <button id="btn-validate" class="btn btn-outline-success">校验</button>
+					<button id="btn-remove-empty" class="btn btn-outline-danger">删除空值</button>
+					<button id="btn-clear" class="btn btn-outline-danger">清空</button>
+				</div>
+
+			</div>
+
+			<!-- 下：输出 -->
+			<div class="flex-grow-1 d-flex flex-column min-h-0 mt-2">
+				<div class="card h-100 pane">
+					<div class="card-header d-flex align-items-center justify-content-between">
+						<span>输出<span id="message"></span></span>
+						<small id="output-stats" class="text-muted"></small>
+					</div>
+					<div class="card-body p-0 d-flex flex-column">
+						<textarea id="output" class="form-control border-0 rounded-0" placeholder="结果显示在这里" readonly></textarea>
+					</div>
+				</div>
+			</div>
+		</main>
+	</div>
+
+	<script>
+		(function() {
+			const els = {
+				input: document.getElementById('input'),
+				output: document.getElementById('output'),
+				indent: document.getElementById('indent'),
+				path: document.getElementById('path'),
+				file: document.getElementById('file'),
+				inputStats: document.getElementById('input-stats'),
+				outputStats: document.getElementById('output-stats'),
+				alertBox: document.getElementById('alert-box'),
+			};
+
+			const getIndent = () => {
+				const el = els.indent;
+				if (!el) return 2;
+				const v = el.value;
+				return v === '\\t' ? '\t' : (Number.isNaN(+v) ? 2 : +v);
+			};
+
+			const parseJSON = (text) => {
+				if (!text || !text.trim()) throw new Error('输入为空');
+				return JSON.parse(text);
+			};
+
+			const pretty = (obj) => JSON.stringify(obj, null, getIndent());
+			const minify = (obj) => JSON.stringify(obj);
+
+			const isPlainObject = (v) => Object.prototype.toString.call(v) === '[object Object]';
+
+			const sortKeysShallow = (obj) => {
+				if (!isPlainObject(obj)) return obj;
+				const out = {};
+				Object.keys(obj).sort().forEach(k => out[k] = obj[k]);
+				return out;
+			};
+
+			const sortKeysDeep = (val) => {
+				if (Array.isArray(val)) return val.map(sortKeysDeep);
+				if (isPlainObject(val)) {
+					const out = {};
+					Object.keys(val).sort().forEach(k => out[k] = sortKeysDeep(val[k]));
+					return out;
+				}
+				return val;
+			};
+
+			const isEmpty = (v) => v === null || v === '' || (Array.isArray(v) && v.length === 0) || (isPlainObject(v) && Object.keys(v).length === 0);
+
+			const removeEmpty = (val) => {
+				if (Array.isArray(val)) return val.map(removeEmpty);
+				if (isPlainObject(val)) {
+					const out = {};
+					for (const [k, v] of Object.entries(val)) {
+						const nv = removeEmpty(v);
+						if (!isEmpty(nv)) out[k] = nv;
+					}
+					return out;
+				}
+				return val;
+			};
+
+			// a.b[0].c 解析
+			const extractByPath = (obj, path) => {
+				if (!path) return obj;
+				const tokens = [];
+				let i = 0; let buf = '';
+				const flush = () => { if (buf) { tokens.push(buf); buf = ''; } };
+				while (i < path.length) {
+					const ch = path[i];
+					if (ch === '.') { flush(); i++; continue; }
+					if (ch === '[') {
+						flush();
+						let j = path.indexOf(']', i+1);
+						if (j === -1) throw new Error('路径格式错误: 缺少 ]');
+						const idx = path.slice(i+1, j).trim();
+						if (!/^\d+$/.test(idx)) throw new Error('目前仅支持数字下标');
+						tokens.push(Number(idx));
+						i = j + 1; continue;
+					}
+					buf += ch; i++;
+				}
+				flush();
+
+				let cur = obj;
+				for (const t of tokens) {
+					if (cur == null) return undefined;
+					cur = cur[t];
+				}
+				return cur;
+			};
+
+			const updateStats = () => {
+				const inText = els.input.value || '';
+				els.inputStats.textContent = `${inText.length} 字符`;
+				const outText = els.output.value || '';
+				els.outputStats.textContent = `${outText.length} 字符`;
+			};
+
+			const doWithParsed = (fn) => {
+				try {
+					const obj = parseJSON(els.input.value);
+					const res = fn(obj);
+					els.output.value = typeof res === 'string' ? res : pretty(res);
+				} catch (e) {
+					console.error(e);
+					const msg = '错误：' + (e && e.message ? e.message : e);
+					els.output.value = String(msg);
+				} finally {
+					updateStats();
+				}
+			};
+
+			// 事件绑定
+			document.getElementById('btn-format').addEventListener('click', () => doWithParsed(pretty));
+			document.getElementById('btn-minify').addEventListener('click', () => doWithParsed(minify));
+			document.getElementById('btn-sort-shallow').addEventListener('click', () => doWithParsed(sortKeysShallow));
+			document.getElementById('btn-sort-deep').addEventListener('click', () => doWithParsed(sortKeysDeep));
+			document.getElementById('btn-remove-empty').addEventListener('click', () => doWithParsed(removeEmpty));
+
+			document.getElementById('btn-validate').addEventListener('click', () => {
+                let message = document.getElementById("message");
+				try {
+					parseJSON(els.input.value);
+                    message.innerText = ' ✅ JSON 合法';
+				} catch (e) {
+					message.innerText = 'JSON 非法：' + (e && e.message ? e.message : e);
+				}
+				updateStats();
+			});
+			document.getElementById('btn-clear').addEventListener('click', () => {
+				els.input.value = '';
+				els.output.value = '';
+				updateStats();
+			});
+			const btnExtract = document.getElementById('btn-extract');
+			if (btnExtract && els.path) {
+				btnExtract.addEventListener('click', () => doWithParsed(obj => extractByPath(obj, els.path.value)));
+			}
+
+			document.getElementById('btn-copy').addEventListener('click', async () => {
+				
+					await navigator.clipboard.writeText(els.output.value || '');
+				
+			});
+			document.getElementById('btn-download').addEventListener('click', () => {
+				const blob = new Blob([els.output.value || ''], { type: 'application/json;charset=utf-8' });
+				const a = document.createElement('a');
+				a.href = URL.createObjectURL(blob);
+				a.download = 'output.json';
+				a.click();
+				URL.revokeObjectURL(a.href);
+			});
+
+			if (els.file) {
+				els.file.addEventListener('change', () => {
+					const f = els.file.files && els.file.files[0];
+					if (!f) return;
+					const reader = new FileReader();
+					reader.onload = () => { els.input.value = String(reader.result || ''); updateStats(); };
+					reader.onerror = () => { els.output.value = '读取文件失败'; updateStats(); };
+					reader.readAsText(f);
+				});
+			}
+
+			els.input.addEventListener('input', updateStats);
+
+			// 快捷键：Ctrl/Cmd + Enter 格式化
+			document.addEventListener('keydown', (e) => {
+				if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+					e.preventDefault();
+					document.getElementById('btn-format').click();
+				}
+			});
+
+			// 初始统计
+			updateStats();
+		})();
+	</script>
+</body>
+</html>

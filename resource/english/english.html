@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" id="viewport"
+        content="width=device-width,initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>机械英语</title>
+    <link rel="stylesheet" href="resource/libs/bootstrap.css">
+</head>
+
+<body>
+    <div id="app" class="min-vh-100 d-flex flex-column">
+        <header class="flex-shrink-0 border-bottom">
+            <div class="container py-2 d-flex align-items-center justify-content-between">
+                <strong>机械英语</strong>
+                <form class="d-flex align-items-center gap-2">
+                    <a class="btn btn-link text-decoration-none" href="/english-zc.html">找茬模式></a>
+                    <select id="datasetSelect" class="form-select form-select-sm w-auto"></select>
+                </form>
+            </div>
+        </header>
+        <main class="flex-grow-1">
+            <div class="container d-flex justify-content-center">
+                <div class="text-center mt-5 col-12 col-md-8 col-lg-6">
+                    <div id="top-slot" class="mb-4 mt-2"></div>
+                    <input id="answer-input" type="text" class="form-control form-control-lg text-center" placeholder="输入英文并按回车">
+                    <div id="bottom-slot" class="mt-4"></div>
+                </div>
+            </div>
+        </main>
+        <footer class="flex-shrink-0 border-top">
+            <div class="container py-2 d-flex align-items-center justify-content-between">
+                <span>你已学习：<span id="count">0</span> 次</span>
+                <span>QQ群：822175108</span>
+            </div>
+        </footer>
+    </div>
+    <script>
+        (function () {
+            const state = {
+                selectItem: '/resource/english/2000.json',
+                itemList: [
+                    { id: 1, title: '多邻国单词', url: '/resource/english/dlg.json' },
+                    { id: 2, title: '2000单词', url: '/resource/english/2000.json' },
+                    { id: 3, title: '4000单词', url: '/resource/english/4000.json' },
+                    { id: 4, title: '6000单词', url: '/resource/english/6000.json' }
+                ],
+                c: 0,
+                thisWord: { original: '', translation: '' },
+                allWords: [],
+                words: []
+            };
+
+            const els = {
+                select: document.getElementById('datasetSelect'),
+                top: document.getElementById('top-slot'),
+                bottom: document.getElementById('bottom-slot'),
+                input: document.getElementById('answer-input'),
+                count: document.getElementById('count')
+            };
+
+            // Single word element (English) and one meaning element (Chinese)
+            const wordEl = document.createElement('div');
+            wordEl.id = 'word';
+            wordEl.className = 'fs-1';
+            const meaningEl = document.createElement('div');
+            meaningEl.className = 'fs-1';
+
+            let countKey = null;
+
+            const pickIndex = (arr) => Math.floor(Math.random() * arr.length);
+            const pick = (arr) => arr[pickIndex(arr)];
+            const speak = (text) => {
+                try { window.speechSynthesis.speak(new SpeechSynthesisUtterance(text)); } catch (_) {}
+            };
+
+            function sanitizeMeaning(str) {
+                if (!str) return '';
+                const s = String(str).trim();
+                const parts = s
+                    .split(/[,，;；、\/]|\s+or\s+|\s+或\s+|\s+和\s+|\s+及\s+/i)
+                    .map(p => p.trim())
+                    .filter(Boolean);
+                let first = (parts[0] || s).trim();
+                first = first.replace(/^((n|v|vi|vt|adj|adv|prep|conj|pron|num|art|int|abbr|aux|pl|u|c)\.?\s*)+/i, '').trim();
+                return first || s;
+            }
+
+            function normalizeAnswer(s) {
+                return String(s || '').trim().toLowerCase();
+            }
+
+            function renderHeader() {
+                els.select.innerHTML = state.itemList.map(opt => `<option value="${opt.url}">${opt.title}</option>`).join('');
+                els.select.value = state.selectItem;
+            }
+
+            function renderWord() {
+                wordEl.textContent = state.thisWord.original || '\u00A0';
+                meaningEl.textContent = sanitizeMeaning(state.thisWord.translation) || '\u00A0';
+                // Alternate English position: top then bottom then top...
+                if (state.wordOnTop) {
+                    els.top.appendChild(wordEl);
+                    els.bottom.appendChild(meaningEl);
+                } else {
+                    els.top.appendChild(meaningEl);
+                    els.bottom.appendChild(wordEl);
+                }
+                els.count.textContent = state.c;
+            }
+
+            function setupNextWord() {
+                if (state.words.length === 0) {
+                    alert('休息一下吧！');
+                    window.location.reload();
+                    return;
+                }
+                state.thisWord = state.words.splice(pickIndex(state.words), 1)[0];
+                // flip position each time
+                state.wordOnTop = !state.wordOnTop;
+                speak(state.thisWord.original);
+                els.input.value = '';
+                renderWord();
+                els.input.focus();
+            }
+
+            function handleInput() {
+                const val = normalizeAnswer(els.input.value);
+                if (val && val === normalizeAnswer(state.thisWord.original)) {
+                    showOverlay('✅ 正确！');
+                    state.c += 1;
+                    if (countKey) localStorage.setItem(countKey, state.c);
+                    setTimeout(() => { hideOverlay(); setupNextWord(); }, 800);
+                }
+            }
+
+            function loadData() {
+                fetch(state.selectItem)
+                    .then(r => r.json())
+                    .then(data => {
+                        const list = Array.isArray(data) ? data : [];
+                        state.allWords = list.map(w => ({ original: w.original, translation: sanitizeMeaning(w.translation) }));
+                        for (let i = 0; i < 40; i++) {
+                            const w = pick(state.allWords);
+                            state.words.push(w, w, w, w, w, w);
+                        }
+                        setupNextWord();
+                    })
+                    .catch(err => console.error(err));
+            }
+
+            // 简易正确提示遮罩
+            let overlayEl = null;
+            function prepareOverlay() {
+                overlayEl = document.createElement('div');
+                overlayEl.className = 'position-fixed top-0 start-0 w-100 h-100 d-none d-flex align-items-center justify-content-center';
+                overlayEl.style.background = 'rgba(0,0,0,.6)';
+                overlayEl.style.zIndex = '1050';
+                overlayEl.innerHTML = '<div class="text-white fw-bold display-4">✅ 正确！</div>';
+                document.body.appendChild(overlayEl);
+            }
+            function showOverlay(text) {
+                if (!overlayEl) prepareOverlay();
+                overlayEl.querySelector('div').textContent = text;
+                overlayEl.classList.remove('d-none');
+            }
+            function hideOverlay() {
+                if (overlayEl) overlayEl.classList.add('d-none');
+            }
+
+            function init() {
+                const saved = localStorage.getItem('url');
+                if (saved) state.selectItem = saved;
+                countKey = 'c' + (Date.now() + '').substring(0, 8);
+                const savedC = localStorage.getItem(countKey);
+                if (savedC) state.c = parseInt(savedC, 10) || 0;
+                state.wordOnTop = true; // start with English on top
+                renderHeader();
+                renderWord();
+                els.select.addEventListener('change', (e) => {
+                    state.selectItem = e.target.value;
+                    localStorage.setItem('url', state.selectItem);
+                    location.reload();
+                });
+                els.input.addEventListener('input', handleInput);
+                els.input.addEventListener('keydown', (e) => { if (e.key === 'Enter') handleInput(); });
+                prepareOverlay();
+                loadData();
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', init);
+            } else {
+                init();
+            }
+        })();
+    </script>
+    <script>
+        var _hmt = _hmt || [];
+        (function () {
+            var hm = document.createElement("script");
+            hm.src = "https://hm.baidu.com/hm.js?1985025c6ead5c1cce5d594f1193605a";
+            var s = document.getElementsByTagName("script")[0];
+            s.parentNode.insertBefore(hm, s);
+        })();
+    </script>
+</body>
+
+</html>

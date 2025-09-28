@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" id="viewport"
+        content="width=device-width,initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>机械英语</title>
+    <link rel="stylesheet" href="resource/libs/bootstrap.css">
+</head>
+
+<body>
+    <div id="app" class="min-vh-100 d-flex flex-column">
+        <header class="flex-shrink-0 border-bottom">
+            <div class="container py-2 d-flex align-items-center justify-content-between">
+                <strong>机械英语</strong>
+                <form class="d-flex align-items-center gap-2">
+                    <a class="btn btn-link text-decoration-none" href="/english.html">打字模式></a>
+                    <select id="datasetSelect" class="form-select form-select-sm w-auto"></select>
+                </form>
+            </div>
+        </header>
+        <main class="flex-grow-1">
+            <div class="container d-flex justify-content-center">
+                <div class="text-center mt-5 col-12 col-md-8 col-lg-6">
+                    <div id="word-text" class="fs-1 mb-5 mt-2">&nbsp;</div>
+                    <div id="choices" class="d-grid gap-2 my-3"></div>
+                </div>
+            </div>
+        </main>
+        <footer class="flex-shrink-0 border-top">
+            <div class="container py-2 d-flex align-items-center justify-content-between">
+                <span>你已学习：<span id="count">0</span> 次</span>
+                <span>QQ群：822175108</span>
+            </div>
+        </footer>
+    </div>
+    <script>
+        (function () {
+            const state = {
+                selectItem: '/resource/english/2000.json',
+                itemList: [
+                    { id: 1, title: '多邻国单词', url: '/resource/english/dlg.json' },
+                    { id: 2, title: '2000单词', url: '/resource/english/2000.json' },
+                    { id: 3, title: '4000单词', url: '/resource/english/4000.json' },
+                    { id: 4, title: '6000单词', url: '/resource/english/6000.json' }
+                    
+                ],
+                c: 0,
+                thisWord: { original: '', translation: '' },
+                allWords: [],
+                words: [],
+                okCount: 0,
+                correctValue: null,
+                askOriginal: true
+            };
+
+            const els = {
+                select: document.getElementById('datasetSelect'),
+                text: document.getElementById('word-text'),
+                choices: document.getElementById('choices'),
+                count: document.getElementById('count')
+            };
+
+            let countKey = null;
+
+            const pickIndex = (arr) => Math.floor(Math.random() * arr.length);
+            const pick = (arr) => arr[pickIndex(arr)];
+            const shuffle = (array) => {
+                for (let i = array.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [array[i], array[j]] = [array[j], array[i]];
+                }
+                return array;
+            };
+            const speak = (text) => {
+                try { window.speechSynthesis.speak(new SpeechSynthesisUtterance(text)); } catch (_) {}
+            };
+
+            // 仅显示一个中文含义：按常见分隔符切分，取第一项，并去掉常见词性前缀
+            function sanitizeMeaning(str) {
+                if (!str) return '';
+                const s = String(str).trim();
+                const parts = s
+                    .split(/[,，;；、/]|\s+or\s+|\s+或\s+|\s+和\s+|\s+及\s+/i)
+                    .map(p => p.trim())
+                    .filter(Boolean);
+                let first = (parts[0] || s).trim();
+                // 去掉常见英文词性缩写前缀
+                first = first.replace(/^((n|v|vi|vt|adj|adv|prep|conj|pron|num|art|int|abbr|aux|pl|u|c)\.?\s*)+/i, '').trim();
+                return first || s;
+            }
+
+            function renderHeader() {
+                els.select.innerHTML = state.itemList.map(opt => `<option value="${opt.url}">${opt.title}</option>`).join('');
+                els.select.value = state.selectItem;
+            }
+
+            function renderWord() {
+                // 只显示英文或中文之一（中文仅展示一个意思）
+                const text = state.askOriginal
+                    ? (state.thisWord.original || '\u00A0')
+                    : (sanitizeMeaning(state.thisWord.translation) || '\u00A0');
+                els.text.textContent = text;
+                els.count.textContent = state.c;
+            }
+
+            function buildChoices() {
+                // 若显示英文，则备选项为中文（取一个意思）；若显示中文，则备选项为英文
+                const isPromptEnglish = state.askOriginal;
+                state.correctValue = isPromptEnglish
+                    ? sanitizeMeaning(state.thisWord.translation)
+                    : state.thisWord.original;
+
+                const distractors = new Set();
+                while (distractors.size < 3) {
+                    const w = pick(state.allWords);
+                    const candidate = isPromptEnglish ? sanitizeMeaning(w.translation) : w.original;
+                    if (candidate && candidate !== state.correctValue) distractors.add(candidate);
+                }
+                const options = shuffle([state.correctValue, ...Array.from(distractors)]);
+
+                els.choices.innerHTML = '';
+                options.forEach(text => {
+                    const btn = document.createElement('button');
+                    btn.textContent = text;
+                    btn.className = 'btn btn-outline-secondary w-100';
+                    btn.addEventListener('click', () => handleChoice(text, btn));
+                    els.choices.appendChild(btn);
+                });
+            }
+
+            function handleChoice(val, btn) {
+                const correct = val === state.correctValue;
+                btn.classList.remove('btn-outline-secondary');
+                btn.classList.add(correct ? 'btn-outline-success' : 'btn-outline-danger');
+                btn.disabled = true;
+                if (correct) {
+                    showOverlay('✅ 正确！');
+                    state.c += 1;
+                    if (countKey) localStorage.setItem(countKey, state.c);
+                    setTimeout(() => { hideOverlay(); setupNextWord(); }, 1500);
+                }
+            }
+
+            function setupNextWord() {
+                if (state.words.length === 0) {
+                    alert('休息一下吧！');
+                    window.location.reload();
+                    return;
+                }
+                state.thisWord = state.words.splice(pickIndex(state.words), 1)[0];
+                // 随机选择显示英文或中文
+                state.askOriginal = Math.random() < 0.5;
+                speak(state.thisWord.original);
+                state.okCount = 0;
+                renderWord();
+                buildChoices();
+            }
+
+            function loadData() {
+                fetch(state.selectItem)
+                    .then(r => r.json())
+                    .then(data => {
+                        // 在加载时将翻译精简为单一合理含义
+                        const list = Array.isArray(data) ? data : [];
+                        state.allWords = list.map(w => ({
+                            original: w.original,
+                            translation: sanitizeMeaning(w.translation)
+                        }));
+                        // build weighted practice list
+                        for (let i = 0; i < 40; i++) {
+                            const w = pick(state.allWords);
+                            state.words.push(w, w, w, w, w, w);
+                        }
+                        setupNextWord();
+                    })
+                    .catch(err => console.error(err));
+            }
+
+            function init() {
+                const saved = localStorage.getItem('url');
+                if (saved) state.selectItem = saved;
+                countKey = 'c' + (Date.now() + '').substring(0, 8);
+                const savedC = localStorage.getItem(countKey);
+                if (savedC) state.c = parseInt(savedC, 10) || 0;
+                renderHeader();
+                renderWord();
+                els.select.addEventListener('change', (e) => {
+                    state.selectItem = e.target.value;
+                    localStorage.setItem('url', state.selectItem);
+                    location.reload();
+                });
+                // 预备全屏提示层
+                prepareOverlay();
+                loadData();
+            }
+
+            // 全屏提示：正确时短暂显示
+            let overlayEl = null;
+            function prepareOverlay() {
+                overlayEl = document.createElement('div');
+                overlayEl.className = 'position-fixed top-0 start-0 w-100 h-100 d-none d-flex align-items-center justify-content-center';
+                overlayEl.style.background = 'rgba(0,0,0,.6)';
+                overlayEl.style.zIndex = '1050';
+                overlayEl.innerHTML = '<div class="text-white fw-bold display-4">✅ 正确！</div>';
+                document.body.appendChild(overlayEl);
+            }
+            function showOverlay(text) {
+                if (!overlayEl) prepareOverlay();
+                overlayEl.querySelector('div').textContent = text;
+                overlayEl.classList.remove('d-none');
+            }
+            function hideOverlay() {
+                if (overlayEl) overlayEl.classList.add('d-none');
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', init);
+            } else {
+                init();
+            }
+        })();
+    </script>
+</body>
+
+</html>
