@@ -7,6 +7,25 @@
         content="width=device-width,initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>机械英语</title>
     <link rel="stylesheet" href="/resource/bootstrap.css">
+    <style>
+        /* 减少 iOS 上按钮残留的“选中/按下”样式 */
+        html, body { -webkit-tap-highlight-color: transparent; }
+        .btn:focus, .btn:active { box-shadow: none !important; outline: 0 !important; }
+
+        /* 固定布局以避免 iOS 整页滚动条 */
+        html, body { height: 100%; overflow: hidden; }
+        #app { height: 100vh; overflow: hidden; }
+        #app > header, #app > footer {
+            position: fixed; left: 0; right: 0; background: #fff; z-index: 1020;
+        }
+        #app > header { top: 0; }
+        #app > footer { bottom: 0; }
+        #app > main { position: fixed; left: 0; right: 0; /* top/bottom 由脚本计算设置 */
+            overflow: auto; -webkit-overflow-scrolling: touch; }
+        /* 隐藏滚动条但保留可滚动（主要针对 iOS/WebKit） */
+        .no-scrollbar { scrollbar-width: none; }
+        .no-scrollbar::-webkit-scrollbar { width: 0; height: 0; }
+    </style>
 </head>
 
 <body>
@@ -20,7 +39,7 @@
                 </form>
             </div>
         </header>
-        <main class="flex-grow-1">
+        <main class="flex-grow-1 no-scrollbar">
             <div class="container d-flex justify-content-center">
                 <div class="text-center mt-5 col-12 col-md-8 col-lg-6">
                     <div id="word-text" class="fs-1 mb-5 mt-2">&nbsp;</div>
@@ -37,6 +56,18 @@
     </div>
     <script>
         (function () {
+            // 固定布局：根据 header/footer 高度计算 main 可视区域
+            function applyFixedLayout() {
+                const headerEl = document.querySelector('#app > header');
+                const footerEl = document.querySelector('#app > footer');
+                const mainEl = document.querySelector('#app > main');
+                if (!headerEl || !footerEl || !mainEl) return;
+                const top = headerEl.offsetHeight || 0;
+                const bottom = footerEl.offsetHeight || 0;
+                mainEl.style.top = top + 'px';
+                mainEl.style.bottom = bottom + 'px';
+            }
+
             const state = {
                 selectItem: '/english/2000.json',
                 itemList: [
@@ -106,6 +137,10 @@
             }
 
             function buildChoices() {
+                // 避免上一次点击后焦点残留到新按钮（iOS Safari）
+                if (document.activeElement && typeof document.activeElement.blur === 'function') {
+                    try { document.activeElement.blur(); } catch (_) {}
+                }
                 // 若显示英文，则备选项为中文（取一个意思）；若显示中文，则备选项为英文
                 const isPromptEnglish = state.askOriginal;
                 state.correctValue = isPromptEnglish
@@ -125,6 +160,11 @@
                     const btn = document.createElement('button');
                     btn.textContent = text;
                     btn.className = 'btn btn-outline-secondary w-100';
+                    btn.setAttribute('type', 'button'); // 明确为普通按钮，避免默认行为
+                    // 在 iOS 上避免新建按钮自动获得焦点导致显示为"选中"样式
+                    if (/iPad|iPhone|iPod/.test(navigator.userAgent)) {
+                        btn.tabIndex = -1;
+                    }
                     btn.addEventListener('click', () => handleChoice(text, btn));
                     els.choices.appendChild(btn);
                 });
@@ -135,6 +175,8 @@
                 btn.classList.remove('btn-outline-secondary');
                 btn.classList.add(correct ? 'btn-outline-success' : 'btn-outline-danger');
                 btn.disabled = true;
+                // 立即失焦，避免 iOS 在下一题上保留选中样式
+                try { btn.blur(); } catch (_) {}
                 if (correct) {
                     showOverlay('✅ 正确！');
                     state.c += 1;
@@ -149,6 +191,10 @@
                     window.location.reload();
                     return;
                 }
+                // 切换题目前尝试清理当前任何焦点
+                if (document.activeElement && typeof document.activeElement.blur === 'function') {
+                    try { document.activeElement.blur(); } catch (_) {}
+                }
                 state.thisWord = state.words.splice(pickIndex(state.words), 1)[0];
                 // 随机选择显示英文或中文
                 state.askOriginal = Math.random() < 0.5;
@@ -156,6 +202,10 @@
                 state.okCount = 0;
                 renderWord();
                 buildChoices();
+                // 再次确保没有默认焦点
+                if (document.activeElement && typeof document.activeElement.blur === 'function') {
+                    try { document.activeElement.blur(); } catch (_) {}
+                }
             }
 
             function loadData() {
@@ -185,6 +235,7 @@
                 const savedC = localStorage.getItem(countKey);
                 if (savedC) state.c = parseInt(savedC, 10) || 0;
                 renderHeader();
+                applyFixedLayout();
                 renderWord();
                 els.select.addEventListener('change', (e) => {
                     state.selectItem = e.target.value;
@@ -220,6 +271,14 @@
             } else {
                 init();
             }
+
+            // 监听窗口变化，重新计算布局
+            window.addEventListener('resize', () => {
+                applyFixedLayout();
+            });
+            window.addEventListener('orientationchange', () => {
+                applyFixedLayout();
+            });
         })();
     </script>
 </body>
