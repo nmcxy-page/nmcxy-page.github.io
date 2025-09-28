@@ -14,7 +14,6 @@
 		.pane .card-body { flex: 1 1 auto; min-height: 0; }
 		.pane textarea { flex: 1 1 auto; min-height: 0; resize: none; overflow: auto; }
 		.toolbar .btn { white-space: nowrap; }
-		.small-muted { font-size: 12px; color: #6c757d; }
 	</style>
 	<link rel="icon" href="data:,">
 	<meta name="robots" content="noindex">
@@ -79,19 +78,8 @@
 			const els = {
 				input: document.getElementById('input'),
 				output: document.getElementById('output'),
-				indent: document.getElementById('indent'),
-				path: document.getElementById('path'),
-				file: document.getElementById('file'),
 				inputStats: document.getElementById('input-stats'),
 				outputStats: document.getElementById('output-stats'),
-				alertBox: document.getElementById('alert-box'),
-			};
-
-			const getIndent = () => {
-				const el = els.indent;
-				if (!el) return 2;
-				const v = el.value;
-				return v === '\\t' ? '\t' : (Number.isNaN(+v) ? 2 : +v);
 			};
 
 			const parseJSON = (text) => {
@@ -99,27 +87,11 @@
 				return JSON.parse(text);
 			};
 
-			const pretty = (obj) => JSON.stringify(obj, null, getIndent());
+			const pretty = (obj) => JSON.stringify(obj, null, 2);
 			const minify = (obj) => JSON.stringify(obj);
 
 			const isPlainObject = (v) => Object.prototype.toString.call(v) === '[object Object]';
 
-			const sortKeysShallow = (obj) => {
-				if (!isPlainObject(obj)) return obj;
-				const out = {};
-				Object.keys(obj).sort().forEach(k => out[k] = obj[k]);
-				return out;
-			};
-
-			const sortKeysDeep = (val) => {
-				if (Array.isArray(val)) return val.map(sortKeysDeep);
-				if (isPlainObject(val)) {
-					const out = {};
-					Object.keys(val).sort().forEach(k => out[k] = sortKeysDeep(val[k]));
-					return out;
-				}
-				return val;
-			};
 
 			const isEmpty = (v) => v === null || v === '' || (Array.isArray(v) && v.length === 0) || (isPlainObject(v) && Object.keys(v).length === 0);
 
@@ -136,35 +108,6 @@
 				return val;
 			};
 
-			// a.b[0].c 解析
-			const extractByPath = (obj, path) => {
-				if (!path) return obj;
-				const tokens = [];
-				let i = 0; let buf = '';
-				const flush = () => { if (buf) { tokens.push(buf); buf = ''; } };
-				while (i < path.length) {
-					const ch = path[i];
-					if (ch === '.') { flush(); i++; continue; }
-					if (ch === '[') {
-						flush();
-						let j = path.indexOf(']', i+1);
-						if (j === -1) throw new Error('路径格式错误: 缺少 ]');
-						const idx = path.slice(i+1, j).trim();
-						if (!/^\d+$/.test(idx)) throw new Error('目前仅支持数字下标');
-						tokens.push(Number(idx));
-						i = j + 1; continue;
-					}
-					buf += ch; i++;
-				}
-				flush();
-
-				let cur = obj;
-				for (const t of tokens) {
-					if (cur == null) return undefined;
-					cur = cur[t];
-				}
-				return cur;
-			};
 
 			const updateStats = () => {
 				const inText = els.input.value || '';
@@ -190,17 +133,19 @@
 			// 事件绑定
 			document.getElementById('btn-format').addEventListener('click', () => doWithParsed(pretty));
 			document.getElementById('btn-minify').addEventListener('click', () => doWithParsed(minify));
-			document.getElementById('btn-sort-shallow').addEventListener('click', () => doWithParsed(sortKeysShallow));
-			document.getElementById('btn-sort-deep').addEventListener('click', () => doWithParsed(sortKeysDeep));
 			document.getElementById('btn-remove-empty').addEventListener('click', () => doWithParsed(removeEmpty));
 
 			document.getElementById('btn-validate').addEventListener('click', () => {
-                let message = document.getElementById("message");
+				let message = document.getElementById("message");
 				try {
 					parseJSON(els.input.value);
-                    message.innerText = ' ✅ JSON 合法';
+					const ok = '✅ JSON 合法';
+					message.innerText = ' ' + ok;
+					els.output.value = ok;
 				} catch (e) {
-					message.innerText = 'JSON 非法：' + (e && e.message ? e.message : e);
+					const err = 'JSON 非法：' + (e && e.message ? e.message : e);
+					message.innerText = ' ' + err;
+					els.output.value = err;
 				}
 				updateStats();
 			});
@@ -209,10 +154,6 @@
 				els.output.value = '';
 				updateStats();
 			});
-			const btnExtract = document.getElementById('btn-extract');
-			if (btnExtract && els.path) {
-				btnExtract.addEventListener('click', () => doWithParsed(obj => extractByPath(obj, els.path.value)));
-			}
 
 			document.getElementById('btn-copy').addEventListener('click', async () => {
 				
@@ -228,16 +169,6 @@
 				URL.revokeObjectURL(a.href);
 			});
 
-			if (els.file) {
-				els.file.addEventListener('change', () => {
-					const f = els.file.files && els.file.files[0];
-					if (!f) return;
-					const reader = new FileReader();
-					reader.onload = () => { els.input.value = String(reader.result || ''); updateStats(); };
-					reader.onerror = () => { els.output.value = '读取文件失败'; updateStats(); };
-					reader.readAsText(f);
-				});
-			}
 
 			els.input.addEventListener('input', updateStats);
 
